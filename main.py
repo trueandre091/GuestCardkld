@@ -1,17 +1,18 @@
 import logging
 
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton, Update
 from telegram.ext import (
     Application,
     CommandHandler,
     ContextTypes,
     ConversationHandler,
+    CallbackQueryHandler,
     MessageHandler,
     filters,
 )
 
 from const import TOKEN
-from text import *
+from text import START, MAIN
 
 # Enable logging
 logging.basicConfig(
@@ -27,7 +28,6 @@ AGREEMENT, MENU, OPTION = range(3)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Starts the conversation and asks the user about their gender."""
     reply_keyboard = [["Согласен с условиями пользования"]]
-    user = update.message.from_user
 
     await update.message.reply_text(
         START["greet"],
@@ -35,7 +35,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
         START["info"],
         reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard, one_time_keyboard=True, input_field_placeholder="What?"
+            reply_keyboard, one_time_keyboard=True, input_field_placeholder="What?", resize_keyboard=True
         ),
     )
 
@@ -44,14 +44,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Stores the selected gender and asks for a photo."""
+    buttons = [InlineKeyboardButton(text=name, callback_data=name) for name in MAIN['buttons']]
+
     user = update.message.from_user
     logger.info("Agreement %s: %s", user.first_name, update.message.text)
     await update.message.reply_text(
         MAIN["info"],
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=InlineKeyboardMarkup.from_column(buttons),
     )
 
     return OPTION
+
+
+async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    await query.edit_message_text(text=f"Selected option: {query.data}")
 
 
 async def option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -128,22 +137,18 @@ def main() -> None:
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(TOKEN).build()
 
-    # Add conversation handler with the states GENDER, PHOTO, LOCATION and BIO
+    buttons = "|".join(MAIN['buttons'])
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
             MENU: [MessageHandler(filters.Regex("^(Согласен с условиями пользования)$"), menu)],
-            OPTION: [MessageHandler(filters.OPTION, option)],
-            # LOCATION: [
-            #     MessageHandler(filters.LOCATION, location),
-            #     CommandHandler("skip", skip_location),
-            # ],
-            # BIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, bio)],
+            OPTION: [MessageHandler(filters.Regex(f"^({buttons})$"), option)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
 
     application.add_handler(conv_handler)
+    application.add_handler(CallbackQueryHandler(handle_button))
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling(allowed_updates=Update.ALL_TYPES)
