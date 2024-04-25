@@ -8,3 +8,4 @@
 .idea/workspace.xml
 DB/__pycache__/database.cpython-312.pyc
 *.pyc
+info/credentials.json

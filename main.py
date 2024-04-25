@@ -12,9 +12,9 @@ from telegram.ext import (
 )
 
 from const import TOKEN
-from text import START, MAIN
+from info.text import START, MAIN
 
-# Enable logging
+
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
@@ -32,6 +32,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
         START["greet"],
     )
+    await update.message.reply_photo(photo=START["photo"])
     await update.message.reply_text(
         START["info"],
         reply_markup=ReplyKeyboardMarkup(
@@ -48,12 +49,13 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.message.from_user
     logger.info("Agreement %s: %s", user.first_name, update.message.text)
+    await update.message.reply_photo(photo=MAIN["photo"])
     await update.message.reply_text(
         MAIN["info"],
         reply_markup=InlineKeyboardMarkup.from_column(buttons),
     )
 
-    return OPTION
+    return MENU
 
 
 async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -64,13 +66,12 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the photo and asks for a location."""
     user = update.message.from_user
     photo_file = await update.message.photo[-1].get_file()
     await photo_file.download_to_drive("user_photo.jpg")
     logger.info("Photo of %s: %s", user.first_name, "user_photo.jpg")
     await update.message.reply_text(
-        "Gorgeous! Now, send me your location please, or send /skip if you don't want to."
+        ""
     )
 
     return MENU
