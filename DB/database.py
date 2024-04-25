@@ -1,9 +1,10 @@
 import os
 import sqlite3
 
-DATABASE_DIR = "C:\\Users\\andre\\Desktop\\Проекты\\ЧатБот\\pythonProject3\\.venv\\DB"
+DATABASE_DIR = "C:\\Users\\andre\\Desktop\\GuestCardkld\\DB"
 DATABASE_NAME = "DataBase.db"
 DATABASE_PATH = os.path.join(DATABASE_DIR, DATABASE_NAME)
+
 
 def create_connection():
     if not os.path.exists(DATABASE_DIR):
@@ -24,8 +25,8 @@ def create_table():
                                         id integer PRIMARY KEY,
                                         username text NOT NULL,
                                         start text NOT NULL,
-                                        card boolean NOT NULL,
-                                        info text NOT NULL
+                                        likes text NOT NULL,
+                                        categories text NOT NULL
                                     ); """
     try:
         cursor.execute(table_creation_query)
@@ -37,13 +38,45 @@ def create_table():
             conn.close()
 
 
-def add_user(user_id, username, start, card=False, info=""):
+def add_user(user_id, username, start=True, likes="", categories=""):
     conn = create_connection()
-    sql = ''' INSERT INTO users(id, username, start, card, info)
+    sql = ''' INSERT INTO users(id, username, start, likes, categories)
               VALUES(?,?,?,?,?) ON CONFLICT(id) DO NOTHING'''
     try:
         cursor = conn.cursor()
-        cursor.execute(sql, (user_id, username, start, card, info))
+        cursor.execute(sql, (user_id, username, start, likes, categories))
+        conn.commit()
+    except sqlite3.Error as e:
+        print(e)
+    finally:
+        if conn:
+            conn.close()
+
+
+def update_user(user_id, username=None, start=None, likes=None, categories=None):
+    conn = create_connection()
+    sql = ''' UPDATE users
+              SET username = ?,
+                  start = ?,
+                  likes = ?,
+                  categories = ?
+              WHERE id = ?'''
+    try:
+        cursor = conn.cursor()
+        current_user = get_user(user_id)
+        if not current_user:
+            print("User not found.")
+            return
+
+        data = (
+            username if username is not None else current_user[1],
+            start if start is not None else current_user[2],
+            current_user[3] + likes if likes is not None else current_user[3],
+            current_user[4] + categories if categories is not None else current_user[4],
+            user_id
+        )
+
+        cursor.execute(sql, data)
         conn.commit()
     except sqlite3.Error as e:
         print(e)
@@ -65,3 +98,7 @@ def get_user(user_id):
     finally:
         if conn:
             conn.close()
+
+
+if __name__ == "__main__":
+    create_table()

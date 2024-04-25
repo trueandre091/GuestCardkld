@@ -11,23 +11,27 @@ from telegram.ext import (
     filters,
 )
 
-from const import TOKEN
-from info.text import START, MAIN
+import info.data
+from DB import database as db
 
+from const import TOKEN
+from info.data import START, MAIN, OPTION, Option
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
-
 logger = logging.getLogger(__name__)
 
-AGREEMENT, MENU, OPTION = range(3)
+AGREEMENT, MENU = range(2)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Starts the conversation and asks the user about their gender."""
     reply_keyboard = [["Согласен с условиями пользования"]]
+
+    user = update.message.from_user
+    db.add_user(user.id, user.username)
 
     await update.message.reply_text(
         START["greet"],
@@ -44,7 +48,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Stores the selected gender and asks for a photo."""
     buttons = [InlineKeyboardButton(text=name, callback_data=name) for name in MAIN['buttons']]
 
     user = update.message.from_user
@@ -61,22 +64,59 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    user = query.from_user
+    logger.info("Category / Place %s: %s", user.first_name, query.data)
 
-    await query.edit_message_text(text=f"Selected option: {query.data}")
+    buttons = [InlineKeyboardButton(text=name, callback_data=name) for name in OPTION['buttons']]
+    if query.data in MAIN['buttons']:
+        category = query.data
+        op = Option(query.from_user, category)
+        text = op.create_message()
+
+        db.update_user(query.from_user.id, categories=f"{info.data.categories_dict[category]} ")
+
+        await query.edit_message_text(text=text,
+                                      reply_markup=InlineKeyboardMarkup.from_column(buttons))
+
+    elif query.data in OPTION["buttons"]:
+        if query.data == OPTION["buttons"][2]:
+
+            for obj in Option.list_of_rows:
+                if obj.from_user.username != query.from_user.username:
+                    continue
+                text = obj.create_message()
+                await query.edit_message_text(text=text,
+                                              reply_markup=InlineKeyboardMarkup.from_column(buttons))
+
+        elif query.data == OPTION["buttons"][1]:
+            for obj in Option.list_of_rows:
+                if obj.from_user.username != query.from_user.username:
+                    continue
+                row = obj.current
+                db.update_user(query.from_user.id, likes=f"{row[0]};")
+
+        elif query.data == OPTION["buttons"][0]:
+            for obj in Option.list_of_rows:
+                if obj.from_user.username != query.from_user.username:
+                    continue
+                text = obj.create_message(reverse=True)
+                await query.edit_message_text(text=text,
+                                              reply_markup=InlineKeyboardMarkup.from_column(buttons))
 
 
-async def option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    user = update.message.from_user
-    photo_file = await update.message.photo[-1].get_file()
-    await photo_file.download_to_drive("user_photo.jpg")
-    logger.info("Photo of %s: %s", user.first_name, "user_photo.jpg")
-    await update.message.reply_text(
-        ""
-    )
 
-    return MENU
-
-
+# async def option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+#     user = update.message.from_user
+#     photo_file = await update.message.photo[-1].get_file()
+#     await photo_file.download_to_drive("user_photo.jpg")
+#     logger.info("Photo of %s: %s", user.first_name, "user_photo.jpg")
+#     await update.message.reply_text(
+#         ""
+#     )
+#
+#     return MENU
+#
+#
 # async def skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 #     """Skips the photo and asks for a location."""
 #     user = update.message.from_user
@@ -135,15 +175,13 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 def main() -> None:
-    # Create the Application and pass it your bot's token.
     application = Application.builder().token(TOKEN).build()
 
     buttons = "|".join(MAIN['buttons'])
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            MENU: [MessageHandler(filters.Regex("^(Согласен с условиями пользования)$"), menu)],
-            OPTION: [MessageHandler(filters.Regex(f"^({buttons})$"), option)],
+            MENU: [MessageHandler(filters.Regex("^(Согласен с условиями пользования)$"), menu)]
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
@@ -151,7 +189,6 @@ def main() -> None:
     application.add_handler(conv_handler)
     application.add_handler(CallbackQueryHandler(handle_button))
 
-    # Run the bot until the user presses Ctrl-C
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
