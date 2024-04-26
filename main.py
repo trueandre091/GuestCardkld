@@ -15,7 +15,7 @@ import info.data
 from DB import database as db
 
 from const import TOKEN
-from info.data import START, MAIN, OPTION, Option
+from info.data import START, WELCOME, MENU, OPTION, Option
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -23,7 +23,7 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
-AGREEMENT, MENU = range(2)
+AGREEMENT_N, WELCOME_N, MENU_N = range(3)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -34,31 +34,46 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     db.add_user(user.id, user.username)
 
     await update.message.reply_text(
-        START["greet"],
+        START["greet"], parse_mode='HTML'
     )
     await update.message.reply_photo(photo=START["photo"])
     await update.message.reply_text(
-        START["info"],
+        START["info"], parse_mode='HTML',
         reply_markup=ReplyKeyboardMarkup(
             reply_keyboard, one_time_keyboard=True, input_field_placeholder="What?", resize_keyboard=True
         ),
     )
 
-    return MENU
+    return WELCOME_N
 
 
-async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    buttons = [InlineKeyboardButton(text=name, callback_data=name) for name in MAIN['buttons']]
+async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    reply_keyboard = [["Общая информация", "Поиск по категориям"]]
 
     user = update.message.from_user
     logger.info("Agreement %s: %s", user.first_name, update.message.text)
-    await update.message.reply_photo(photo=MAIN["photo"])
+
+    await update.message.reply_photo(photo=WELCOME["photo"], parse_mode='HTML', )
     await update.message.reply_text(
-        MAIN["info"],
+        WELCOME["info"], parse_mode='HTML',
+        reply_markup=ReplyKeyboardMarkup(
+            reply_keyboard, one_time_keyboard=True, input_field_placeholder="What?", resize_keyboard=True
+        ),
+    )
+    return MENU_N
+
+
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    buttons = [InlineKeyboardButton(text=name, callback_data=name) for name in MENU['buttons']]
+
+    user = update.message.from_user
+    logger.info("Agreement %s: %s", user.first_name, update.message.text)
+    await update.message.reply_text(
+        MENU["info"], parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup.from_column(buttons),
     )
 
-    return MENU
+    return MENU_N
 
 
 async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -68,12 +83,12 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Category / Place %s: %s", user.first_name, query.data)
 
     buttons = [InlineKeyboardButton(text=name, callback_data=name) for name in OPTION['buttons']]
-    if query.data in MAIN['buttons']:
+    if query.data in MENU['buttons']:
         category = query.data
         op = Option(query.from_user, category)
         text = op.create_message()
 
-        db.update_user(query.from_user.id, categories=f"{info.data.categories_dict[category]} ")
+        db.update_user(query.from_user.id, categories=f"{info.data.categories_dict()[category]} ")
 
         await query.edit_message_text(text=text,
                                       reply_markup=InlineKeyboardMarkup.from_column(buttons))
@@ -85,7 +100,7 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if obj.from_user.username != query.from_user.username:
                     continue
                 text = obj.create_message()
-                await query.edit_message_text(text=text,
+                await query.edit_message_text(text=text, parse_mode='HTML',
                                               reply_markup=InlineKeyboardMarkup.from_column(buttons))
 
         elif query.data == OPTION["buttons"][1]:
@@ -100,9 +115,8 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if obj.from_user.username != query.from_user.username:
                     continue
                 text = obj.create_message(reverse=True)
-                await query.edit_message_text(text=text,
+                await query.edit_message_text(text=text, parse_mode='HTML',
                                               reply_markup=InlineKeyboardMarkup.from_column(buttons))
-
 
 
 # async def option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -177,11 +191,11 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 def main() -> None:
     application = Application.builder().token(TOKEN).build()
 
-    buttons = "|".join(MAIN['buttons'])
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            MENU: [MessageHandler(filters.Regex("^(Согласен с условиями пользования)$"), menu)]
+            WELCOME_N: [MessageHandler(filters.Regex("^(Согласен с условиями пользования)$"), welcome)],
+            MENU_N: [MessageHandler(filters.Regex("^(Поиск по категориям)$"), menu)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )

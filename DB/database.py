@@ -67,12 +67,16 @@ def update_user(user_id, username=None, start=None, likes=None, categories=None)
         if not current_user:
             print("User not found.")
             return
+        if categories is not None and categories not in current_user[4].split():
+            categories = current_user[4] + categories
+        else:
+            categories = current_user[4]
 
         data = (
             username if username is not None else current_user[1],
             start if start is not None else current_user[2],
             current_user[3] + likes if likes is not None else current_user[3],
-            current_user[4] + categories if categories is not None else current_user[4],
+            categories,
             user_id
         )
 
