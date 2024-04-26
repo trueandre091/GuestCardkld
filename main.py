@@ -11,11 +11,10 @@ from telegram.ext import (
     filters,
 )
 
-import info.data
 from DB import database as db
-
 from const import TOKEN
-from info.data import START, WELCOME, MENU, OPTION, Option
+from info.dialoges import START, WELCOME, MENU, GENERAL, OPTION
+from info.connection import Data, Option
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -23,7 +22,8 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
-AGREEMENT_N, WELCOME_N, MENU_N = range(3)
+AGREEMENT_N, WELCOME_N, MENU_N, GENERAL_N = range(4)
+DATA = Data()
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -64,7 +64,10 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    buttons = [InlineKeyboardButton(text=name, callback_data=name) for name in MENU['buttons']]
+    buttons = [InlineKeyboardButton(text=name, callback_data=name) for name in DATA.categories]
+
+    user = update.message.from_user
+    logger.info("Categories %s: %s", user.first_name, update.message.text)
 
     user = update.message.from_user
     logger.info("Agreement %s: %s", user.first_name, update.message.text)
@@ -76,6 +79,17 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return MENU_N
 
 
+async def general(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    buttons = [InlineKeyboardButton(text=name, callback_data=name) for name in GENERAL['buttons']]
+
+    await update.message.reply_text(
+        GENERAL["info"], parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup.from_column(buttons),
+    )
+
+    return GENERAL_N
+
+
 async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -83,14 +97,14 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Category / Place %s: %s", user.first_name, query.data)
 
     buttons = [InlineKeyboardButton(text=name, callback_data=name) for name in OPTION['buttons']]
-    if query.data in MENU['buttons']:
+    if query.data in DATA.categories:
         category = query.data
-        op = Option(query.from_user, category)
+        op = Option(DATA, query.from_user, category)
         text = op.create_message()
 
-        db.update_user(query.from_user.id, categories=f"{info.data.categories_dict()[category]} ")
+        db.update_user(query.from_user.id, categories=f"{DATA.categories_dict[category]} ")
 
-        await query.edit_message_text(text=text,
+        await query.edit_message_text(text=text, parse_mode='HTML',
                                       reply_markup=InlineKeyboardMarkup.from_column(buttons))
 
     elif query.data in OPTION["buttons"]:
