@@ -46,8 +46,8 @@ class Option:
                 f"Адрес: {row[1]}\n"
                 f"Ваша скидка: <b>{row[3]}</b> {row[4]}\n\n"
                 f"Контакты: {row[2]}")
-
-        return text
+        photo = row[6]
+        return [text, photo]
 
 
 def connection():
@@ -70,3 +70,6 @@ def categories_dict(sheet: Worksheet):
 
 def data(sheet: Worksheet):
     return sheet.batch_get(['A2:G100'])[0]
+
+
+DATA = Data()

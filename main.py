@@ -1,6 +1,5 @@
-import logging
-
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton, Update
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton, Update, \
+    InputMediaPhoto
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -11,23 +10,17 @@ from telegram.ext import (
     filters,
 )
 
+from log.logger import logger
 from DB import database as db
-from const import TOKEN
+from const import TOKEN, DOTS
 from info.dialoges import START, WELCOME, MENU, GENERAL, OPTION
-from info.connection import Data, Option
+from info.connection import DATA, Option
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logger = logging.getLogger(__name__)
-
-AGREEMENT_N, WELCOME_N, MENU_N, GENERAL_N = range(4)
-DATA = Data()
+from admin.panel import receive_password, request_password, refresh, news, publish, confirm
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Starts the conversation and asks the user about their gender."""
+    """Starts the conversation"""
     reply_keyboard = [["Согласен с условиями пользования"]]
 
     user = update.message.from_user
@@ -44,7 +37,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         ),
     )
 
-    return WELCOME_N
+    return DOTS["WELCOME_N"]
 
 
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -60,7 +53,7 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_keyboard, one_time_keyboard=True, input_field_placeholder="What?", resize_keyboard=True
         ),
     )
-    return MENU_N
+    return DOTS["OPTION_N"]
 
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -69,14 +62,13 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     logger.info("Categories %s: %s", user.first_name, update.message.text)
 
-    user = update.message.from_user
-    logger.info("Agreement %s: %s", user.first_name, update.message.text)
-    await update.message.reply_text(
-        MENU["info"], parse_mode='HTML',
+    await update.message.reply_photo(
+        photo=MENU["photo"],
+        caption=MENU["info"], parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup.from_column(buttons),
     )
 
-    return MENU_N
+    return DOTS["OPTION_N"]
 
 
 async def general(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -86,8 +78,7 @@ async def general(update: Update, context: ContextTypes.DEFAULT_TYPE):
         GENERAL["info"], parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup.from_column(buttons),
     )
-
-    return GENERAL_N
+    return DOTS["OPTION_N"]
 
 
 async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -100,95 +91,40 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data in DATA.categories:
         category = query.data
         op = Option(DATA, query.from_user, category)
-        text = op.create_message()
+        info = op.create_message()
 
         db.update_user(query.from_user.id, categories=f"{DATA.categories_dict[category]} ")
 
-        await query.edit_message_text(text=text, parse_mode='HTML',
-                                      reply_markup=InlineKeyboardMarkup.from_column(buttons))
+        await query.edit_message_media(media=InputMediaPhoto(info[1]))
+        await query.edit_message_caption(caption=info[0], parse_mode='HTML',
+                                         reply_markup=InlineKeyboardMarkup.from_column(buttons))
 
     elif query.data in OPTION["buttons"]:
         if query.data == OPTION["buttons"][2]:
 
-            for obj in Option.list_of_rows:
-                if obj.from_user.username != query.from_user.username:
+            for op in Option.list_of_rows:
+                if op.from_user.username != query.from_user.username:
                     continue
-                text = obj.create_message()
-                await query.edit_message_text(text=text, parse_mode='HTML',
-                                              reply_markup=InlineKeyboardMarkup.from_column(buttons))
+                info = op.create_message()
+                await query.edit_message_media(media=InputMediaPhoto(info[1]))
+                await query.edit_message_caption(caption=info[0], parse_mode='HTML',
+                                                 reply_markup=InlineKeyboardMarkup.from_column(buttons))
 
         elif query.data == OPTION["buttons"][1]:
-            for obj in Option.list_of_rows:
-                if obj.from_user.username != query.from_user.username:
+            for op in Option.list_of_rows:
+                if op.from_user.username != query.from_user.username:
                     continue
-                row = obj.current
+                row = op.current
                 db.update_user(query.from_user.id, likes=f"{row[0]};")
 
         elif query.data == OPTION["buttons"][0]:
-            for obj in Option.list_of_rows:
-                if obj.from_user.username != query.from_user.username:
+            for op in Option.list_of_rows:
+                if op.from_user.username != query.from_user.username:
                     continue
-                text = obj.create_message(reverse=True)
-                await query.edit_message_text(text=text, parse_mode='HTML',
-                                              reply_markup=InlineKeyboardMarkup.from_column(buttons))
-
-
-# async def option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-#     user = update.message.from_user
-#     photo_file = await update.message.photo[-1].get_file()
-#     await photo_file.download_to_drive("user_photo.jpg")
-#     logger.info("Photo of %s: %s", user.first_name, "user_photo.jpg")
-#     await update.message.reply_text(
-#         ""
-#     )
-#
-#     return MENU
-#
-#
-# async def skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-#     """Skips the photo and asks for a location."""
-#     user = update.message.from_user
-#     logger.info("User %s did not send a photo.", user.first_name)
-#     await update.message.reply_text(
-#         "I bet you look great! Now, send me your location please, or send /skip."
-#     )
-#
-#     return LOCATION
-#
-#
-#
-# async def location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-#     """Stores the location and asks for some info about the user."""
-#     user = update.message.from_user
-#     user_location = update.message.location
-#     logger.info(
-#         "Location of %s: %f / %f", user.first_name, user_location.latitude, user_location.longitude
-#     )
-#     await update.message.reply_text(
-#         "Maybe I can visit you sometime! At last, tell me something about yourself."
-#     )
-#
-#     return BIO
-#
-#
-# async def skip_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-#     """Skips the location and asks for info about the user."""
-#     user = update.message.from_user
-#     logger.info("User %s did not send a location.", user.first_name)
-#     await update.message.reply_text(
-#         "You seem a bit paranoid! At last, tell me something about yourself."
-#     )
-#
-#     return BIO
-#
-#
-# async def bio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-#     """Stores the info about the user and ends the conversation."""
-#     user = update.message.from_user
-#     logger.info("Bio of %s: %s", user.first_name, update.message.text)
-#     await update.message.reply_text("Thank you! I hope we can talk again some day.")
-#
-#     return ConversationHandler.END
+                info = op.create_message(reverse=True)
+                await query.edit_message_media(media=InputMediaPhoto(media=info[1]))
+                await query.edit_message_caption(caption=info[0], parse_mode='HTML',
+                                                 reply_markup=InlineKeyboardMarkup.from_column(buttons))
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -196,9 +132,8 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.message.from_user
     logger.info("User %s canceled the conversation.", user.first_name)
     await update.message.reply_text(
-        "Bye! I hope we can talk again some day.", reply_markup=ReplyKeyboardRemove()
+        "До свидания!", reply_markup=ReplyKeyboardRemove()
     )
-
     return ConversationHandler.END
 
 
@@ -206,10 +141,20 @@ def main() -> None:
     application = Application.builder().token(TOKEN).build()
 
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
+        entry_points=[CommandHandler("start", start), ],
         states={
-            WELCOME_N: [MessageHandler(filters.Regex("^(Согласен с условиями пользования)$"), welcome)],
-            MENU_N: [MessageHandler(filters.Regex("^(Поиск по категориям)$"), menu)],
+            DOTS["WELCOME_N"]: [MessageHandler(filters.Regex("^(Согласен с условиями пользования)$"), welcome)],
+            DOTS["OPTION_N"]: [MessageHandler(filters.Regex("^(Поиск по категориям)$"), menu),
+                               MessageHandler(filters.Regex("^(Общая информация)$"), general),
+                               CommandHandler("admin", request_password)],
+            DOTS["PASSWORD_N"]: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_password)],
+            DOTS["ADMIN_N"]: [MessageHandler(filters.Regex("^(Обновить карточки заведений)$"), refresh),
+                              MessageHandler(filters.Regex("^(Написать новость)$"), news),
+                              MessageHandler(filters.Regex("^(Получить статистику)$"), general)],
+            DOTS["NEWS_N"]: [MessageHandler(filters.TEXT & ~filters.COMMAND, publish)],
+            DOTS["CONFIRM_N"]: [MessageHandler(filters.Regex("^(Опубликовать)$"), confirm),
+                                MessageHandler(filters.Regex("^(Отмена)$"), request_password)],
+            DOTS["STATISTICS"]: []
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
