@@ -53,6 +53,22 @@ def add_user(user_id, username, start=True, likes="", categories=""):
             conn.close()
 
 
+def get_all_users():
+    """Retrieve all users and their data from the database."""
+    conn = create_connection()
+    sql = 'SELECT * FROM users'
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        all_users = cursor.fetchall()
+        return all_users
+    except sqlite3.Error as e:
+        print(e)
+    finally:
+        if conn:
+            conn.close()
+
+
 def update_user(user_id, username=None, start=None, likes=None, categories=None):
     conn = create_connection()
     sql = ''' UPDATE users
@@ -63,19 +79,24 @@ def update_user(user_id, username=None, start=None, likes=None, categories=None)
               WHERE id = ?'''
     try:
         cursor = conn.cursor()
-        current_user = get_user(user_id)
+        current_user = get_user_by_id(user_id)
         if not current_user:
             print("User not found.")
             return
         if categories is not None and categories not in current_user[4].split():
-            categories = current_user[4] + categories
+            categories = current_user[4] + " " + categories
         else:
             categories = current_user[4]
+
+        if likes is not None and likes not in current_user[3].split():
+            likes = current_user[3] + likes
+        else:
+            likes = current_user[3]
 
         data = (
             username if username is not None else current_user[1],
             start if start is not None else current_user[2],
-            current_user[3] + likes if likes is not None else current_user[3],
+            likes,
             categories,
             user_id
         )
@@ -89,7 +110,8 @@ def update_user(user_id, username=None, start=None, likes=None, categories=None)
             conn.close()
 
 
-def get_user(user_id):
+def get_user_by_id(user_id):
+    """Retrieve a user by their ID from the database."""
     conn = create_connection()
     sql = 'SELECT * FROM users WHERE id=?'
     try:

@@ -19,7 +19,11 @@ async def request_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 async def receive_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     password = update.message.text
     if password != PASSWORD:
-        await update.message.reply_text("Неверный пароль", parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
+        reply_keyboard = [["Общая информация", "Поиск по категориям", "Избранные заведения"]]
+
+        await update.message.reply_text("Неверный пароль", parse_mode="HTML", reply_markup=ReplyKeyboardMarkup(
+            reply_keyboard, one_time_keyboard=True, resize_keyboard=True
+        ))
         return DOTS["WELCOME_N"]
 
     user = update.message.from_user
@@ -47,7 +51,7 @@ async def news(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 async def publish(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    article = update.message
+    article = update.message.text
     reply_keyboard = [['Отмена', 'Опубликовать']]
     await update.message.reply_text(f"{article}\n\n{NEWS["reply"]}", parse_mode="HTML",
                                     reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True,
@@ -70,7 +74,11 @@ async def statistics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_photo(
         photo=STATISTICS["photo"],
         caption=STATISTICS["info"], parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup.from_column(buttons),
+        reply_markup=InlineKeyboardMarkup.from_column(buttons)
     )
 
-    return DOTS["OPTION_N"]
+    return DOTS["STATISTICS_N"]
+
+
+async def graphics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    reply_keyboard = [['Отмена']]
