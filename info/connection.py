@@ -31,22 +31,24 @@ class Option:
     list_of_rows = []
 
     def create_message(self, reverse=False):
+        prev = self.current
         try:
             if reverse:
+                self.current = self.skipped[-1]
                 self.rows.append(self.current)
                 if self.current in self.skipped:
                     self.skipped.remove(self.current)
-                self.current = self.skipped[-1]
             else:
+                self.current = self.rows[0]
                 if self.current in self.rows:
                     self.rows.remove(self.current)
                 self.skipped.append(self.current)
-                self.current = self.rows[0]
         except:
             pass
 
-        flag_1 = True if len(self.rows) else False
-        flag_0 = True if len(self.skipped) else False
+        flag = True
+        if prev == self.current:
+            flag = False
 
         row = self.current
         text = (f"<b>{row[0]}</b>\n\n"
@@ -54,7 +56,7 @@ class Option:
                 f"Ваша скидка: <b>{row[3]}</b> {row[4]}\n\n"
                 f"Контакты: {row[2]}")
         photo = row[6]
-        return [text, photo, flag_0, flag_1]
+        return [text, photo, flag]
 
 
 def connection():

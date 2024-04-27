@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from datetime import datetime, timedelta
 
 DATABASE_DIR = "C:\\Users\\andre\\Desktop\\GuestCardkld\\DB"
 DATABASE_NAME = "DataBase.db"
@@ -26,7 +27,8 @@ def create_table():
                                         username text NOT NULL,
                                         start text NOT NULL,
                                         likes text NOT NULL,
-                                        categories text NOT NULL
+                                        entry_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                                        last_timestamp DATETIME NOT NULL
                                     ); """
     try:
         cursor.execute(table_creation_query)
@@ -38,16 +40,53 @@ def create_table():
             conn.close()
 
 
-def add_user(user_id, username, start=True, likes="", categories=""):
+def create_statistics_table():
     conn = create_connection()
-    sql = ''' INSERT INTO users(id, username, start, likes, categories)
-              VALUES(?,?,?,?,?) ON CONFLICT(id) DO NOTHING'''
+    cursor = conn.cursor()
+    table_creation_query = """ CREATE TABLE IF NOT EXISTS statistics (
+                                        id integer PRIMARY KEY AUTOINCREMENT,
+                                        user_id integer NOT NULL,
+                                        event text NOT NULL,
+                                        info text NOT NULL,
+                                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                                    ); """
     try:
-        cursor = conn.cursor()
-        cursor.execute(sql, (user_id, username, start, likes, categories))
+        cursor.execute(table_creation_query)
         conn.commit()
     except sqlite3.Error as e:
         print(e)
+    finally:
+        if conn:
+            conn.close()
+
+
+def add_user(user_id, username, start=True, likes="",
+             last_timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')):
+    conn = create_connection()
+    sql = ''' INSERT INTO users(id, username, start, likes, last_timestamp)
+              VALUES(?,?,?,?,?) ON CONFLICT(id) DO NOTHING'''
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, (user_id, username, start, likes, last_timestamp))
+        conn.commit()
+    except sqlite3.Error as e:
+        print(e)
+    finally:
+        if conn:
+            conn.close()
+
+
+def add_event(user_id, event, info=""):
+    """Add an event for a user to the statistics table."""
+    conn = create_connection()
+    sql = ''' INSERT INTO statistics(user_id, event, info)
+              VALUES(?,?,?) '''
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, (user_id, event, info))
+        conn.commit()
+    except sqlite3.Error as e:
+        print(f"An error occurred: {e}")
     finally:
         if conn:
             conn.close()
@@ -69,13 +108,42 @@ def get_all_users():
             conn.close()
 
 
-def update_user(user_id, username=None, start=None, likes=None, categories=None):
+def reset_likes(user_id):
+    conn = create_connection()
+    sql = ''' UPDATE users
+                  SET likes = ?
+                  WHERE id = ?'''
+    try:
+        cursor = conn.cursor()
+        current_user = get_user_by_id(user_id)
+        if not current_user:
+            print("User not found.")
+            return
+
+        likes = ""
+        data = (
+            likes,
+            user_id,
+        )
+
+        cursor.execute(sql, data)
+        conn.commit()
+    except sqlite3.Error as e:
+        print(e)
+    finally:
+        if conn:
+            conn.close()
+
+
+def update_user(user_id, username=None, start=None, likes=None, entry_timestamp=None,
+                last_timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')):
     conn = create_connection()
     sql = ''' UPDATE users
               SET username = ?,
                   start = ?,
                   likes = ?,
-                  categories = ?
+                  entry_timestamp = ?,
+                  last_timestamp = ?
               WHERE id = ?'''
     try:
         cursor = conn.cursor()
@@ -83,13 +151,12 @@ def update_user(user_id, username=None, start=None, likes=None, categories=None)
         if not current_user:
             print("User not found.")
             return
-        if categories is not None and categories not in current_user[4].split():
-            categories = current_user[4] + " " + categories
+
         else:
             categories = current_user[4]
 
-        if likes is not None and likes not in current_user[3].split():
-            likes = current_user[3] + likes
+        if likes is not None and likes not in current_user[3].split(";"):
+            likes = current_user[3] + likes + ";"
         else:
             likes = current_user[3]
 
@@ -97,8 +164,9 @@ def update_user(user_id, username=None, start=None, likes=None, categories=None)
             username if username is not None else current_user[1],
             start if start is not None else current_user[2],
             likes,
-            categories,
-            user_id
+            current_user[5],
+            last_timestamp,
+            user_id,
         )
 
         cursor.execute(sql, data)
@@ -126,5 +194,39 @@ def get_user_by_id(user_id):
             conn.close()
 
 
+# Функция для получения статистики за определенный период
+def get_statistics(start_date, end_date):
+    conn = create_connection()
+    sql = '''SELECT event, info, timestamp FROM statistics WHERE timestamp BETWEEN ? AND ?'''
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, (start_date, end_date))
+        statistics = cursor.fetchall()
+        return statistics
+    except sqlite3.Error as e:
+        print(e)
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_active_users(start_date, end_date):
+    conn = create_connection()
+    active_users = []
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT id, last_timestamp FROM users WHERE last_timestamp BETWEEN ? AND ?",
+                    (start_date, end_date))
+        active_users = cur.fetchall()
+    except sqlite3.Error as e:
+        print(e)
+    finally:
+        conn.close()
+    if conn:
+        conn.close()
+    return active_users
+
+
 if __name__ == "__main__":
     create_table()
+    create_statistics_table()

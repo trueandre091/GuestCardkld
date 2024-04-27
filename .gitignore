@@ -13,3 +13,4 @@ info/credentials.json
 /.venv/Lib
 /.venv/Scripts
 .venv/pyvenv.cfg
+.venv/share/man/man1/ttx.1

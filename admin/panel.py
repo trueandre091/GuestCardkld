@@ -3,6 +3,7 @@ from telegram.ext import ContextTypes
 
 from log.logger import logger
 from info.connection import DATA
+from info.dialoges import WELCOME
 from admin.dialoges import REQUEST, ADMIN, REFRESH, NEWS, STATISTICS
 from const import PASSWORD, DOTS
 
@@ -16,23 +17,34 @@ async def request_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     return DOTS["PASSWORD_N"]
 
 
+async def admin_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    reply_keyboard = [["Общая информация", "Поиск по категориям", "Избранные заведения"]]
+    await update.message.reply_photo(
+        WELCOME["photo"], caption=WELCOME["info"], parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
+    )
+    return DOTS["OPTION_N"]
+
+
 async def receive_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     password = update.message.text
     if password != PASSWORD:
         reply_keyboard = [["Общая информация", "Поиск по категориям", "Избранные заведения"]]
 
-        await update.message.reply_text("Неверный пароль", parse_mode="HTML", reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard, one_time_keyboard=True, resize_keyboard=True
-        ))
-        return DOTS["WELCOME_N"]
+        await update.message.reply_text("Неверный пароль")
+        await update.message.reply_photo(WELCOME["photo"], caption=WELCOME["info"], parse_mode="HTML",
+                                         reply_markup=ReplyKeyboardMarkup(
+                                             reply_keyboard, one_time_keyboard=True, resize_keyboard=True
+                                         ))
+        return DOTS["OPTION_N"]
 
     user = update.message.from_user
     logger.info("Entry admin panel %s", user.first_name)
 
     reply_keyboard = [["Обновить карточки заведений", "Написать новость", "Получить статистику"]]
-    await update.message.reply_text(f"{user.first_name}, {ADMIN['info']}", parse_mode="HTML",
-                                    reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True,
-                                                                     resize_keyboard=True))
+    await update.message.reply_photo(ADMIN["photo"], caption=f"{user.first_name}, {ADMIN['info']}", parse_mode="HTML",
+                                     reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True,
+                                                                      resize_keyboard=True))
     return DOTS["ADMIN_N"]
 
 
@@ -68,7 +80,6 @@ async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 async def statistics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    reply_keyboard = [['Отмена']]
     buttons = [InlineKeyboardButton(text=name, callback_data=name) for name in STATISTICS['buttons']]
 
     await update.message.reply_photo(
@@ -77,8 +88,4 @@ async def statistics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         reply_markup=InlineKeyboardMarkup.from_column(buttons)
     )
 
-    return DOTS["STATISTICS_N"]
-
-
-async def graphics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    reply_keyboard = [['Отмена']]
+    return DOTS["ADMIN_N"]
