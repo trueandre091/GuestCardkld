@@ -1,9 +1,6 @@
 import gspread
 from gspread import Worksheet
 from oauth2client.service_account import ServiceAccountCredentials
-from random import shuffle
-
-from info.filters import category_f
 
 
 class Data:
@@ -23,40 +20,30 @@ class Option:
     def __init__(self, DATA: Data, from_user, category) -> None:
         self.from_user = from_user
         self.category = category
-        self.rows = category_f(DATA.data, DATA.categories_dict, self.category)
-        self.current = []
-        self.skipped = []
+        self.rows = category_filter(DATA.data, DATA.categories_dict, self.category)
+        self.index = -1
         self.list_of_rows.append(self)
 
     list_of_rows = []
 
-    def create_message(self, reverse=False):
-        prev = self.current
-        try:
-            if reverse:
-                self.current = self.skipped[-1]
-                self.rows.append(self.current)
-                if self.current in self.skipped:
-                    self.skipped.remove(self.current)
-            else:
-                self.current = self.rows[0]
-                if self.current in self.rows:
-                    self.rows.remove(self.current)
-                self.skipped.append(self.current)
-        except:
-            pass
+    def create_message(self, action=0):
+        if action == 1:
+            self.index -= 1
+            if self.index < 0:
+                self.index = 0
+        elif action == 0:
+            self.index += 1
 
-        flag = True
-        if prev == self.current:
-            flag = False
+        flag1 = False if self.index == (len(self.rows) - 1) else True
+        flag0 = False if self.index == 0 else True
 
-        row = self.current
+        row = self.rows[self.index]
         text = (f"<b>{row[0]}</b>\n\n"
                 f"Адрес: {row[1]}\n"
                 f"Ваша скидка: <b>{row[3]}</b> {row[4]}\n\n"
                 f"Контакты: {row[2]}")
         photo = row[6]
-        return [text, photo, flag]
+        return [text, photo, flag0, flag1]
 
 
 def connection():
@@ -79,6 +66,11 @@ def categories_dict(sheet: Worksheet):
 
 def data(sheet: Worksheet):
     return sheet.batch_get(['A2:G100'])[0]
+
+
+def category_filter(data: list, categories_dict: dict, category: str):
+    num = categories_dict[category]
+    return [row for row in data if num in row[5].split()]
 
 
 DATA = Data()

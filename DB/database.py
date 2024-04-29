@@ -2,7 +2,8 @@ import os
 import sqlite3
 from datetime import datetime, timedelta
 
-DATABASE_DIR = "C:\\Users\\andre\\Desktop\\GuestCardkld\\DB"
+
+DATABASE_DIR = os.path.dirname(__file__)
 DATABASE_NAME = "DataBase.db"
 DATABASE_PATH = os.path.join(DATABASE_DIR, DATABASE_NAME)
 
@@ -152,11 +153,11 @@ def update_user(user_id, username=None, start=None, likes=None, entry_timestamp=
             print("User not found.")
             return
 
-        else:
-            categories = current_user[4]
-
         if likes is not None and likes not in current_user[3].split(";"):
             likes = current_user[3] + likes + ";"
+        elif likes is not None and likes in current_user[3].split(";"):
+            # start = current_user[3].find(likes + ";")
+            likes = current_user[3].replace(likes + ";", "")
         else:
             likes = current_user[3]
 

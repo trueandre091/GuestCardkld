@@ -23,22 +23,20 @@ def plot_statistics(start_date, end_date, path='stats\\graphics'):
 
     categories_items = [item for item in data if item[0] == TITLES[1]]
 
-    # Создание графика
     plt.figure(figsize=(15, 10))
     plt.scatter(timestamps, events, marker='o')
-    # Форматирование графика
     plt.gcf().autofmt_xdate()
     date_format = mdates.DateFormatter('%Y-%m-%d %H:%M')
     plt.gca().xaxis.set_major_formatter(date_format)
-    plt.title('Bot Activity Statistics')
-    plt.xlabel('Time')
-    plt.ylabel('Events')
-    # Отображение графика
+    plt.title('Активность бота')
+    plt.xlabel('Время')
+    plt.ylabel('Событие')
     plt.savefig(f"{path}\\scatter.png")
     plt.close()
 
+    categories_dict = {v: k for k, v in DATA.categories_dict.items()}
     plt.figure(figsize=(15, 10))
-    plt.bar([item[1] for item in categories_items],
+    plt.bar([categories_dict[item[1]] for item in categories_items],
             [len([buff[1] for buff in categories_items if buff[1] == item[1]]) for item in categories_items])
     plt.title("Столбчатая диаграмма популярности категорий")
     plt.xlabel("Категории")
@@ -47,7 +45,7 @@ def plot_statistics(start_date, end_date, path='stats\\graphics'):
     plt.close()
 
     users = [len([buff[1] for buff in active_users if buff[1] == item[1]]) for item in active_users]
-    timestamps = [datetime.strptime(item[1], '%Y-%m-%d %H:%M:%S') for item in active_users]
+    timestamps = [datetime.strptime(item[1].split(".")[0], '%Y-%m-%d %H:%M:%S') for item in active_users]
     plt.figure(figsize=(15, 10))
     plt.bar(timestamps, users, width=0.3)
     plt.gcf().autofmt_xdate()

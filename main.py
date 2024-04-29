@@ -1,5 +1,11 @@
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton, Update, \
+from telegram import (
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    Update,
     InputMediaPhoto
+)
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -11,6 +17,7 @@ from telegram.ext import (
 )
 from datetime import datetime, date
 
+from info.patterns import make_keyboard, category_message
 from log.logger import logger
 from DB import database as db
 from const import TOKEN, DOTS
@@ -18,8 +25,8 @@ from admin.dialoges import STATISTICS, ADMIN
 from info.dialoges import START, WELCOME, MENU, GENERAL, OPTION, LIKED
 from info.connection import DATA, Option
 from stats.handler import TITLES, PERIODS, plot_statistics
-
-from admin.panel import receive_password, admin_cancel, request_password, refresh, news, publish, confirm, statistics
+from admin.panel import receive_password, admin_cancel, request_password, refresh, news, publish, confirm, statistics, \
+    period_statistics
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -33,13 +40,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
         START["greet"], parse_mode='HTML'
     )
-    await update.message.reply_photo(photo=START["photo"])
-    await update.message.reply_text(
-        START["info"], parse_mode='HTML',
-        reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard, one_time_keyboard=True, resize_keyboard=True
-        ),
-    )
+    await update.effective_chat.send_photo(photo=START["photo"], caption=START["info"], parse_mode='HTML',
+                                           reply_markup=ReplyKeyboardMarkup(
+                                               reply_keyboard, one_time_keyboard=True, resize_keyboard=True
+                                           ))
 
     return DOTS["WELCOME_N"]
 
@@ -49,40 +53,47 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.message.from_user
     logger.info("Agreement %s: %s", user.first_name, update.message.text)
+    db.update_user(update.message.from_user.id, last_timestamp=datetime.now())
 
-    await update.message.reply_photo(photo=WELCOME["photo"], parse_mode='HTML', )
-    await update.message.reply_text(
-        WELCOME["info"], parse_mode='HTML',
-        reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard, one_time_keyboard=True, resize_keyboard=True
-        ),
-    )
+    await update.effective_chat.send_photo(photo=WELCOME["photo"], parse_mode='HTML', caption=WELCOME["info"],
+                                           reply_markup=ReplyKeyboardMarkup(
+                                               reply_keyboard, resize_keyboard=True
+                                           ))
+
     return DOTS["OPTION_N"]
 
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    buttons = [InlineKeyboardButton(text=name, callback_data=name) for name in DATA.categories]
-    buttons.insert(0, InlineKeyboardButton(text="В главное меню", callback_data="В главное меню"))
+    categories = {v: k for k, v in DATA.categories_dict.items()}
+    keyboard = []
+    for i in range(1, len(DATA.categories) + 1):
+        if (i - 1) % 3 == 0:
+            keyboard.append([InlineKeyboardButton(text=categories[str(i)], callback_data=categories[str(i)])])
+        else:
+            keyboard[-1].append(InlineKeyboardButton(text=categories[str(i)], callback_data=categories[str(i)]))
+    keyboard.append([InlineKeyboardButton(text="В главное меню", callback_data="В главное меню")])
 
-    user = update.message.from_user
-    logger.info("Categories %s: %s", user.first_name, update.message.text)
+    db.update_user(update.effective_user.id, last_timestamp=datetime.now())
 
-    await update.message.reply_photo(
-        photo=MENU["photo"],
-        caption=MENU["info"], parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup.from_column(buttons),
-    )
+    user = update.effective_user
+    logger.info("Categories %s: %s", user.first_name, update.message.text if update.message is not None else None)
+
+    await update.effective_chat.send_photo(photo=MENU["photo"], caption=MENU["info"],
+                                           parse_mode='HTML',
+                                           reply_markup=InlineKeyboardMarkup(keyboard))
 
     return DOTS["OPTION_N"]
 
 
 async def general(update: Update, context: ContextTypes.DEFAULT_TYPE):
     buttons = [InlineKeyboardButton(text=name, callback_data=name) for name in GENERAL['buttons']]
+    db.update_user(update.message.from_user.id, last_timestamp=datetime.now())
 
-    await update.message.reply_photo(
+    await update.effective_chat.send_photo(
         photo=GENERAL["photo"], caption=GENERAL["info"], parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup.from_column(buttons)
     )
+
     return DOTS["OPTION_N"]
 
 
@@ -96,25 +107,16 @@ async def liked(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return DOTS["OPTION_N"]
 
+    db.update_user(update.message.from_user.id, last_timestamp=datetime.now())
+
     buttons = [InlineKeyboardButton(text=name, callback_data=name) for name in LIKED['buttons']]
     likes = "\n".join(bd_user[3].split(';'))
-    await update.message.reply_text(
+    await update.effective_chat.send_message(
         text=f"{LIKED['info']}\n\n{likes}", parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup.from_row(buttons)
     )
+
     return DOTS["OPTION_N"]
-
-
-def make_keyboard(buttons):
-    button_full_width = InlineKeyboardButton(buttons[0], callback_data=buttons[0])
-    button_1 = InlineKeyboardButton(buttons[1], callback_data=buttons[1])
-    button_2 = InlineKeyboardButton(buttons[2], callback_data=buttons[2])
-    button_3 = InlineKeyboardButton(buttons[3], callback_data=buttons[3])
-
-    return [
-        [button_full_width],  # Первая кнопка во всю ширину
-        [button_1, button_2, button_3]  # Следующие три кнопки в одном ряду
-    ]
 
 
 async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -124,16 +126,13 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Category / Place %s: %s", user.first_name, query.data)
 
     if query.data in DATA.categories:
-        reply_markup = InlineKeyboardMarkup(make_keyboard(OPTION["buttons"]))
         category = query.data
-        op = Option(DATA, query.from_user, category)
-        info = op.create_message()
-
         db.add_event(query.from_user.id, TITLES[1], DATA.categories_dict[category])
-        if info[2]:
-            await query.edit_message_media(media=InputMediaPhoto(info[1]))
-            await query.edit_message_caption(caption=info[0], parse_mode='HTML',
-                                             reply_markup=reply_markup)
+        db.update_user(query.from_user.id, last_timestamp=datetime.now())
+
+        op = Option(DATA, query.from_user, category)
+        Option.list_of_rows.append(op)
+        await category_message(query, False)
 
     elif query.data == "В главное меню":
         for op in Option.list_of_rows:
@@ -142,7 +141,8 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 break
         reply_keyboard = [["Общая информация", "Поиск по категориям", "Избранные заведения"]]
 
-        logger.info("Agreement %s: %s", user.first_name, query.data)
+        db.update_user(query.from_user.id, last_timestamp=datetime.now())
+        logger.info("Main menu %s: %s", user.first_name, query.data)
 
         await query.delete_message()
         await query.message.chat.send_photo(photo=WELCOME["photo"], caption=WELCOME["info"], parse_mode='HTML',
@@ -151,89 +151,46 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                             ))
 
     elif query.data in OPTION["buttons"]:
+        if query.data == OPTION["buttons"][2]:
+            await category_message(query, 2)
+
         if query.data == OPTION["buttons"][3]:
-            for op in Option.list_of_rows:
-                if op.from_user.username == query.from_user.username:
-                    info = op.create_message()
-                    reply_markup = InlineKeyboardMarkup(make_keyboard(OPTION["buttons"]))
+            await category_message(query, 3)
 
-                    if info[2]:
-                        await query.edit_message_media(media=InputMediaPhoto(info[1]))
-                        await query.edit_message_caption(caption=info[0], parse_mode='HTML',
-                                                         reply_markup=reply_markup)
-
-        elif query.data == OPTION["buttons"][2]:
-            for op in Option.list_of_rows:
-                if op.from_user.username == query.from_user.username:
-                    row = op.current
-                    db.update_user(query.from_user.id, likes=row[0])
-                    db.add_event(user.id, TITLES[2], row[0])
-                    break
+        elif query.data == OPTION["buttons"][-1]:
+            db.update_user(query.from_user.id, last_timestamp=datetime.now())
+            await category_message(query, 0)
 
         elif query.data == OPTION["buttons"][1]:
-            for op in Option.list_of_rows:
-                if op.from_user.username == query.from_user.username:
-                    info = op.create_message(reverse=True)
-                    reply_markup = InlineKeyboardMarkup(make_keyboard(OPTION["buttons"]))
-
-                    if info[2]:
-                        await query.edit_message_media(media=InputMediaPhoto(media=info[1]))
-                        await query.edit_message_caption(caption=info[0], parse_mode='HTML',
-                                                         reply_markup=reply_markup)
-                    break
+            db.update_user(query.from_user.id, last_timestamp=datetime.now())
+            await category_message(query, 1)
 
     elif query.data in GENERAL["buttons"]:
-        buttons = [InlineKeyboardButton(text=name, callback_data=name) for name in DATA.categories]
-        buttons.insert(0, InlineKeyboardButton(text="В главное меню", callback_data="В главное меню"))
-
-        logger.info("Categories %s: %s", user.first_name, query.data)
-
-        if query.message.photo:
-            await query.edit_message_media(media=InputMediaPhoto(media=MENU["photo"]))
-            await query.edit_message_caption(
-                caption=MENU["info"], parse_mode='HTML',
-                reply_markup=InlineKeyboardMarkup.from_column(buttons),
-            )
-        else:
-            await query.delete_message()
-            await query.message.chat.send_photo(photo=MENU["photo"], caption=MENU["info"], parse_mode='HTML',
-                                                reply_markup=InlineKeyboardMarkup.from_column(buttons))
-
-        return DOTS["OPTION_N"]
+        await query.delete_message()
+        await menu(update, context)
 
     elif query.data in LIKED["buttons"]:
         if query.data == LIKED["buttons"][0]:
+            buttons = [InlineKeyboardButton(text="В главное меню", callback_data="В главное меню")]
             db.reset_likes(query.from_user.id)
             db.add_event(user.id, TITLES[3], ";".join(query.message.text.split("\n\n")[-1].split("\n")))
             logger.info("Reset likes %s", user.first_name)
+            db.update_user(query.from_user.id, last_timestamp=datetime.now())
 
-            await query.edit_message_text(LIKED["reset"], parse_mode='HTML', reply_markup=InlineKeyboardMarkup([]))
+            await query.edit_message_text(LIKED["reset"], parse_mode='HTML',
+                                          reply_markup=InlineKeyboardMarkup.from_row(buttons))
 
     elif query.data in STATISTICS['buttons'][:-1]:
-        if query.data == "Всё время":
-            start_date = date(2024, 4, 25)
-        else:
-            start_date = datetime.now() - PERIODS[query.data]
-        buttons = [InlineKeyboardButton(text=name, callback_data=name) for name in STATISTICS['buttons']]
-        end_date = datetime.now()
-        path = plot_statistics(start_date, end_date, "stats\\graphics")
-
-        plot = open(f"{path}\\scatter.png", 'rb')
-        bar = open(f"{path}\\bar.png", 'rb')
-        bar1 = open(f"{path}\\bar1.png", 'rb')
-        await query.message.chat.send_media_group(
-            media=[InputMediaPhoto(media=plot), InputMediaPhoto(media=bar), InputMediaPhoto(media=bar1)])
-        plot.close()
-        bar.close()
-        bar1.close()
+        await period_statistics(query)
 
     elif query.data == STATISTICS['buttons'][-1]:
-        print(1)
-        reply_keyboard = [["Обновить карточки заведений", "Написать новость", "Получить статистику"]]
-        await update.message.reply_photo(ADMIN["photo"], caption=f"{user.first_name}, {ADMIN['info']}",
-                                         parse_mode="HTML",
-                                         reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True,
-                                                                          resize_keyboard=True))
+        db.update_user(query.from_user.id, last_timestamp=datetime.now())
+        keyboard = [["Обновить карточки заведений", "Получить статистику"], ["В главное меню"]]
+        await query.delete_message()
+        await query.message.chat.send_photo(ADMIN["photo"], caption=f"{user.first_name}, {ADMIN['info']}",
+                                            parse_mode="HTML",
+                                            reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True,
+                                                                             resize_keyboard=True))
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -241,6 +198,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.message.from_user
     logger.info("User %s canceled the conversation.", user.first_name)
     db.add_event(user.id, TITLES[4])
+    db.update_user(update.message.from_user.id, last_timestamp=datetime.now())
 
     await update.message.reply_text(
         "До свидания, приезжайте снова!", reply_markup=ReplyKeyboardRemove()
@@ -264,7 +222,8 @@ def main() -> None:
                 MessageHandler(filters.Regex("^(Отмена)$"), admin_cancel)],
             DOTS["ADMIN_N"]: [MessageHandler(filters.Regex("^(Обновить карточки заведений)$"), refresh),
                               MessageHandler(filters.Regex("^(Написать новость)$"), news),
-                              MessageHandler(filters.Regex("^(Получить статистику)$"), statistics)],
+                              MessageHandler(filters.Regex("^(Получить статистику)$"), statistics),
+                              MessageHandler(filters.Regex("^(В главное меню)$"), welcome)],
             DOTS["NEWS_N"]: [MessageHandler(filters.TEXT & ~filters.COMMAND, publish)],
             DOTS["CONFIRM_N"]: [MessageHandler(filters.Regex("^(Опубликовать)$"), confirm),
                                 MessageHandler(filters.Regex("^(Отмена)$"), request_password)],
